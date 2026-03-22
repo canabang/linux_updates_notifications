@@ -16,8 +16,11 @@ action:
   # 2.1 DÉTECTION DES MACHINES AVEC MAJ DISPONIBLES ET DE L'APP ELLE-MÊME
   - variables:
       serveurs_maj: >
+        {# Création d'un espace de noms pour stocker dynamiquement les serveurs trouvés #}
         {% set ns = namespace(liste=[]) %}
+        {# Parcours aveugle de toutes les entités update appartenant à au device Linux Update Dashboard #}
         {% for state in states.update | selectattr('attributes.device_name', 'defined') | selectattr('attributes.device_name', 'eq', 'Linux Update Dashboard') %}
+          {# On compte uniquement les serveurs actifs et listant officiellement des packages #}
           {% if state.state == 'on' and state.attributes.update_count is defined and state.attributes.update_count | int > 0 %}
             {% set ns.liste = ns.liste + [state.entity_id] %}
           {% endif %}
@@ -27,6 +30,7 @@ action:
 
       # L'application dashboard elle-même (qui n'a volontairement pas d'update_count)
       app_update_presente: >
+        {# On vérifie spécifiquement le conteneur du Dashboard (qui s'annonce différemment) #}
         {% set ns = namespace(dispo=false) %}
         {% for state in states.update | selectattr('attributes.device_name', 'defined') | selectattr('attributes.device_name', 'eq', 'Linux Update Dashboard') %}
           {% if state.state == 'on' and state.attributes.update_count is not defined %}

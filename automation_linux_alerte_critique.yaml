@@ -65,12 +65,19 @@ action:
       
       # 3.2 DÉDUCTION DE LA CAUSE PRÉCISE DE L'ALERTE POUR L'AFFICHAGE DU TEXTE
       cause: >
+        {# Initialisation des attributs avant/après l'événement #}
         {% set old = trigger.from_state.attributes %}
         {% set new = trigger.to_state.attributes %}
+        
+        {# Vérification si c'est l'entité de l'application Dashboard elle-même #}
         {% if new.get('update_count') is not defined %}
           Nouvelle version de l'application ✨
+        
+        {# Si le serveur passe de joignable à injoignable #}
         {% elif new.get('reachable', true) == false and old.get('reachable', true) == true %}
           Alerte incident : Perte de connexion 💥
+        
+        {# Construction dynamique multi-causes (si maj ET reboot en même temps) #}
         {% else %}
           {% set msg = [] %}
           {% if new.get('security_update_count', 0) | int > old.get('security_update_count', 0) | int %}
@@ -78,9 +85,12 @@ action:
           {% elif new.get('update_count', 0) | int > old.get('update_count', 0) | int %}
             {% set msg = msg + ['MAJ 📦'] %}
           {% endif %}
+          
           {% if new.get('needs_reboot', false) == true and old.get('needs_reboot', false) == false %}
             {% set msg = msg + ['Reboot 🔄'] %}
           {% endif %}
+          
+          {# Concaténation des événements trouvés ou repli par défaut #}
           {{ msg | join(' + ') if msg | length > 0 else 'Mise à jour d\'état ℹ️' }}
         {% endif %}
 
@@ -88,10 +98,14 @@ action:
       notif_titre: "🚨 {{ nom }} : {{ cause }}"
       generated_message: >
         {% set new = trigger.to_state.attributes %}
+        
+        {# Cas 1 : L'alerte concerne le conteneur du Dashboard LUD #}
         {% if new.get('update_count') is not defined %}
         Une nouvelle mise à jour de l'application Dashboard est prête !
         - Version installée : {{ new.get('installed_version', 'Inconnue') }}
         - Version disponible : {{ new.get('latest_version', 'Inconnue') }}
+        
+        {# Cas 2 : L'alerte concerne un serveur Linux standard #}
         {% else %}
         - Mises à jour totales : {{ total }}
         - Sécurité : {{ secu }}
