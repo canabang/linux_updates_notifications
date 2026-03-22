@@ -1,0 +1,88 @@
+# --------------------------------------------------------------------------------------------------
+# CARTE DASHBOARD : ÉTAT DU PARC LINUX (AUTO-ENTITIES + MUSHROOM TEMPLATE)
+# À copier/coller dans une carte "Manuel" de votre tableau de bord Home Assistant
+# --------------------------------------------------------------------------------------------------
+type: vertical-stack
+cards:
+  # 1. LE TITRE DYNAMIQUE
+  - type: custom:mushroom-title-card
+    title: État du Parc Linux
+    subtitle: >-
+      {% set pending = states.update | selectattr('attributes.device_name', 'defined') | selectattr('attributes.device_name', 'eq', 'Linux Update Dashboard') | selectattr('state', 'eq', 'on') | list | length %}
+      {% if pending == 0 %} Flotte 100% à jour {% elif pending == 1 %} 1 serveur en attente de mise à jour {% else %} {{ pending }} serveurs en attente de mise à jour {% endif %}
+
+  # 2. LA LISTE AVEC TEMPLATE TOTAL ET CARD-MOD (Design Streamline: Contour fin & Ombre)
+  - type: custom:auto-entities
+    card:
+      type: vertical-stack
+    card_param: cards
+    sort:
+      method: attribute
+      attribute: update_count
+      reverse: true
+    filter:
+      template: >
+        {% set ns = namespace(cards=[]) %}
+        
+        {% for state in states.update | selectattr('attributes.device_name', 'defined') | selectattr('attributes.device_name', 'eq', 'Linux Update Dashboard') %}
+          
+          {# VARIABLES DE BASE #}
+          {% set nom_propre = state.attributes.system.name if state.attributes.system is defined else '✨ Application Dashboard' %}
+          {% set is_app = state.attributes.update_count is not defined %}
+          {% set total = state.attributes.update_count | default(0) | int %}
+          {% set secu = state.attributes.security_update_count | default(0) | int %}
+          {% set reboot = state.attributes.needs_reboot | default(false) %}
+          
+          {# -- SOUS-TITRE DYNAMIQUE (Détail des MAJ) -- #}
+          {% if state.state == 'off' %}
+            {% set detail = 'À jour' %}
+          {% elif is_app %}
+            {% set detail = 'Nouvelle version : ' ~ state.attributes.latest_version %}
+          {% else %}
+            {% set detail = total ~ ' maj en attente' %}
+            {% if secu > 0 %}
+              {% set detail = detail ~ ' (' ~ secu ~ ' sécurité)' %}
+            {% endif %}
+            {% if reboot %}
+              {% set detail = detail ~ '  🔄 Reboot' %}
+            {% endif %}
+          {% endif %}
+          
+          {# -- COULEUR INTELLIGENTE -- #}
+          {% if state.state == 'off' %}
+            {% set couleur = '#2E8B57' %}
+          {% elif secu > 0 or reboot %}
+            {% set couleur = 'red' %}
+          {% else %}
+            {% set couleur = 'orange' %}
+          {% endif %}
+
+          {# -- ICÔNES PARLANTE -- #}
+          {% if state.state == 'off' %}
+            {% set icone = 'mdi:application' if is_app else 'mdi:server-network' %}
+          {% elif reboot %}
+            {% set icone = 'mdi:restart-alert' %}
+          {% elif secu > 0 %}
+            {% set icone = 'mdi:shield-alert' %}
+          {% else %}
+            {% set icone = 'mdi:package-up' %}
+          {% endif %}
+          
+          {# -- GÉNÉRATION DE LA CARTE AVEC CARD-MOD (Effet Streamline Glassmorphism) -- #}
+          {% set card = {
+            'type': 'custom:mushroom-template-card',
+            'entity': state.entity_id,
+            'primary': nom_propre,
+            'secondary': detail,
+            'icon': icone,
+            'icon_color': couleur,
+            'tap_action': { 'action': 'more-info' },
+            'card_mod': {
+              'style': "ha-card {\n  background: transparent;\n  border: 1px solid rgba(150, 150, 150, 0.15);\n  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);\n  border-radius: 24px;\n  padding-top: 5px;\n  padding-bottom: 5px;\n}"
+            }
+          } %}
+          
+          {% set ns.cards = ns.cards + [card] %}
+        {% endfor %}
+        
+        {{ ns.cards }}

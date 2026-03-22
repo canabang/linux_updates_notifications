@@ -1,0 +1,115 @@
+alias: "🗓️ Bilan Hebdomadaire Mises à jour Serveurs Linux"
+description: >
+  Vérifie l'état de tous les serveurs le Vendredi à 20h15.
+  Génère un rapport dynamique réutilisable pour de multiples canaux de notification.
+mode: single
+
+# 1. DÉCLENCHEUR (LE VENDREDI À 20H15)
+trigger:
+  - platform: time
+    at: "20:15:00"
+    weekday:
+      - fri
+
+# 2. ACTIONS
+action:
+  # 2.1 DÉTECTION DES MACHINES AVEC MAJ DISPONIBLES ET DE L'APP ELLE-MÊME
+  - variables:
+      serveurs_maj: >
+        {% set ns = namespace(liste=[]) %}
+        {% for state in states.update | selectattr('attributes.device_name', 'defined') | selectattr('attributes.device_name', 'eq', 'Linux Update Dashboard') %}
+          {% if state.state == 'on' and state.attributes.update_count is defined and state.attributes.update_count | int > 0 %}
+            {% set ns.liste = ns.liste + [state.entity_id] %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.liste }}
+      nb_serveurs: "{{ serveurs_maj | length }}"
+
+      # L'application dashboard elle-même (qui n'a volontairement pas d'update_count)
+      app_update_presente: >
+        {% set ns = namespace(dispo=false) %}
+        {% for state in states.update | selectattr('attributes.device_name', 'defined') | selectattr('attributes.device_name', 'eq', 'Linux Update Dashboard') %}
+          {% if state.state == 'on' and state.attributes.update_count is not defined %}
+             {% set ns.dispo = true %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.dispo }}
+
+  # 2.2 CONDITION DÉSACTIVÉE (Pour forcer l'envoi du bilan Hebdo même si tout est à jour)
+  # - condition: template
+  #   value_template: "{{ nb_serveurs > 0 or app_update_presente == true }}"
+
+  # 2.3 GÉNÉRATION DU RAPPORT (VARIABLES RÉUTILISABLES)
+  # Stocke le message complet pour pouvoir l'envoyer facilement sur Discord, Telegram, HA, etc.
+  - variables:
+      # Titre générique
+      notif_titre: >
+        {% set suffix = ' (+ App)' if app_update_presente else '' %}
+        {% if nb_serveurs == 0 and not app_update_presente %}
+        🐧 Bilan Linux : Flotte 100% Opérationnelle ✅
+        {% elif nb_serveurs == 0 and app_update_presente %}
+        🐧 Bilan Linux : Mise à jour Dashboard dispo !
+        {% elif nb_serveurs == 1 %}
+        🐧 Bilan Linux : 1 Serveur{{ suffix }} en attente
+        {% else %}
+        🐧 Bilan Linux : {{ nb_serveurs }} Serveurs{{ suffix }} en attente
+        {% endif %}
+      
+      # Couleur par défaut (SeaGreen recommandé par les règles pour les infos positives et bilans)
+      notif_couleur: "#2E8B57" # SeaGreen
+      
+      # Corps du message
+      generated_message: >
+        {% set ns = namespace(msg='') %}
+        
+        {# Si absolument TOUT est à jour #}
+        {% if nb_serveurs == 0 and app_update_presente == false %}
+          {% set ns.msg = "Aucun de vos serveurs ne nécessite de mise à jour cette semaine.\nTout est parfaitement synchronisé et sécurisé ! 🎉\n" %}
+        {% endif %}
+        
+        {# Ajout de la MAJ de l'appli au tout début si elle existe #}
+        {% if app_update_presente == true %}
+           {% for state in states.update | selectattr('attributes.device_name', 'defined') | selectattr('attributes.device_name', 'eq', 'Linux Update Dashboard') %}
+             {% if state.state == 'on' and state.attributes.update_count is not defined %}
+               {% set ns.msg = ns.msg ~ "✨ *Mise à jour du Dashboard détectée !*\n" %}
+               {% set ns.msg = ns.msg ~ "   Version dispo : " ~ state.attributes.latest_version ~ "\n\n" %}
+             {% endif %}
+           {% endfor %}
+        {% endif %}
+
+        {% for s in expand(serveurs_maj) %}
+          {% set nom = s.attributes.system.name | default('Inconnu') %}
+          {% set total = s.attributes.update_count %}
+          {% set secu = s.attributes.security_update_count | default(0) | int %}
+          {% set reboot = s.attributes.needs_reboot | default(false) %}
+          
+          {# Définition de l'icône prioritaire #}
+          {% set icon = '🔴' if secu > 0 else ('🔄' if reboot else '📦') %}
+          
+          {# Construction de la ligne de résumé du serveur #}
+          {% set ligne = icon ~ " *" ~ nom ~ "* : " ~ total ~ " maj" %}
+          {% if secu > 0 %}
+            {% set ligne = ligne ~ " dont *" ~ secu ~ " de sécurité*" %}
+          {% endif %}
+          {% if reboot %}
+            {% set ligne = ligne ~ " (Reboot ⚠️)" %}
+          {% endif %}
+          
+          {% set ns.msg = ns.msg ~ ligne ~ "\n" %}
+        {% endfor %}
+        {{ ns.msg }}
+
+  # 2.4 ENVOI : NOTIFICATION PERSISTANTE HOME ASSISTANT
+  - action: persistent_notification.create
+    data:
+      title: "{{ notif_titre }}"
+      message: "{{ generated_message }}"
+      notification_id: "lud_bilan_hebdo"
+
+  # 2.5 ENVOI : AUTRES CANAUX (COMMENTÉS POUR PLUS TARD)
+  # - action: script.ta_notification_discord_ou_telegram
+  #   data:
+  #     variables:
+  #       title: "{{ notif_titre }}"
+  #       message: "{{ generated_message }}"
+  #       color: "{{ notif_couleur }}"

@@ -1,0 +1,116 @@
+alias: "🚨 Alerte : Mises à jour & État Serveurs Linux"
+description: "Alerte instantanée dès qu'un serveur a de nouveaux paquets (surtout de sécurité), nécessite un redémarrage, ou s'il perd sa connexion."
+mode: queued
+max: 10
+
+# 1. DÉCLENCHEURS (LISTE EXPLICITE POUR ZÉRO IMPACT CPU ET TRACES LISIBLES)
+# Note : Entités séparées volontairement pour garder une interface visuelle Home Assistant aérée.
+trigger:
+  - platform: state
+    entity_id: update.ludash_1_system_1
+  - platform: state
+    entity_id: update.ludash_1_system_2
+  - platform: state
+    entity_id: update.ludash_1_system_3
+  - platform: state
+    entity_id: update.ludash_1_system_4
+  - platform: state
+    entity_id: update.ludash_1_system_5
+  - platform: state
+    entity_id: update.ludash_1_system_6
+  - platform: state
+    entity_id: update.ludash_1_system_7
+  - platform: state
+    entity_id: update.ludash_1_system_8
+  - platform: state
+    entity_id: update.ludash_1_system_9
+  # (Pense à remplacer ces IDs génériques par les tiens)
+  - platform: state
+    entity_id: update.ludash_1_app_update   
+
+# 2. CONDITIONS (FILTRER LES "AGGRAVATIONS" UNIQUEMENT)
+condition:
+  - condition: template
+    value_template: "{{ trigger.to_state is defined and trigger.to_state is not none and trigger.from_state is defined and trigger.from_state is not none }}"
+  
+  - condition: template
+    value_template: >
+      {% set old = trigger.from_state.attributes %}
+      {% set new = trigger.to_state.attributes %}
+      
+      {# Tests d'incrémentation (s'assurer qu'il y a PLUS de MAJ qu'avant) #}
+      {% set maj_up = new.get('update_count', 0) | int > old.get('update_count', 0) | int %}
+      {% set sec_up = new.get('security_update_count', 0) | int > old.get('security_update_count', 0) | int %}
+      {% set kep_up = new.get('kept_back_update_count', 0) | int > old.get('kept_back_update_count', 0) | int %}
+      
+      {# Tests true/false #}
+      {% set reboot_now = new.get('needs_reboot', false) == true and old.get('needs_reboot', false) == false %}
+      {% set perdu = new.get('reachable', true) == false and old.get('reachable', true) == true %}
+      
+      {# Test Dashboard app lui-même (qui n'a pas d'update_count) #}
+      {% set app_up = new.get('update_count') is not defined and trigger.to_state.state == 'on' and trigger.from_state.state == 'off' %}
+      
+      {{ maj_up or sec_up or kep_up or reboot_now or perdu or app_up }}
+
+# 3. ACTIONS
+action:
+  # 3.1 ENREGISTREMENT DES VARIABLES DE LA MACHINE DÉCLENCHEUSE
+  - variables:
+      nom: "{{ trigger.to_state.attributes.system.name if trigger.to_state.attributes.system is defined else 'Linux Update Dashboard' }}"
+      total: "{{ trigger.to_state.attributes.update_count | default(0) }}"
+      secu: "{{ trigger.to_state.attributes.security_update_count | default(0) }}"
+      kept: "{{ trigger.to_state.attributes.kept_back_update_count | default(0) }}"
+      reboot: "{{ trigger.to_state.attributes.needs_reboot | default(false) }}"
+      reachable: "{{ trigger.to_state.attributes.reachable | default(true) }}"
+      
+      # 3.2 DÉDUCTION DE LA CAUSE PRÉCISE DE L'ALERTE POUR L'AFFICHAGE DU TEXTE
+      cause: >
+        {% set old = trigger.from_state.attributes %}
+        {% set new = trigger.to_state.attributes %}
+        {% if new.get('update_count') is not defined %}
+          Nouvelle version de l'application ✨
+        {% elif new.get('reachable', true) == false and old.get('reachable', true) == true %}
+          Alerte incident : Perte de connexion 💥
+        {% else %}
+          {% set msg = [] %}
+          {% if new.get('security_update_count', 0) | int > old.get('security_update_count', 0) | int %}
+            {% set msg = msg + ['Sécurité 🔴'] %}
+          {% elif new.get('update_count', 0) | int > old.get('update_count', 0) | int %}
+            {% set msg = msg + ['MAJ 📦'] %}
+          {% endif %}
+          {% if new.get('needs_reboot', false) == true and old.get('needs_reboot', false) == false %}
+            {% set msg = msg + ['Reboot 🔄'] %}
+          {% endif %}
+          {{ msg | join(' + ') if msg | length > 0 else 'Mise à jour d\'état ℹ️' }}
+        {% endif %}
+
+      # 3.3 CONSTRUCTION DU MESSAGE (RÉUTILISABLE)
+      notif_titre: "🚨 {{ nom }} : {{ cause }}"
+      generated_message: >
+        {% set new = trigger.to_state.attributes %}
+        {% if new.get('update_count') is not defined %}
+        Une nouvelle mise à jour de l'application Dashboard est prête !
+        - Version installée : {{ new.get('installed_version', 'Inconnue') }}
+        - Version disponible : {{ new.get('latest_version', 'Inconnue') }}
+        {% else %}
+        - Mises à jour totales : {{ total }}
+        - Sécurité : {{ secu }}
+        - Retenues : {{ kept }}
+        - Reboot requis : {{ 'Oui 🚩' if reboot else 'Non' }}
+        - Connecté : {{ 'Oui ✅' if reachable else 'Non ❌' }}
+        {% endif %}
+        
+        *Déclenché par: {{ trigger.entity_id }}*
+
+  # 3.4 ENVOI DE LA NOTIFICATION PERSISTANTE NATIVE HOME ASSISTANT
+  - action: persistent_notification.create
+    data:
+      title: "{{ notif_titre }}"
+      message: "{{ generated_message }}"
+      notification_id: "lud_alert_{{ trigger.entity_id }}"
+
+  # 3.5 AUTRES NOTIFICATIONS (À DÉCOMMENTER ET ADAPTER SI BESOIN)
+  # - action: script.TON_SCRIPT_DE_NOTIF_ICI
+  #   data:
+  #     title: "{{ notif_titre }}"
+  #     message: "{{ generated_message }}"
