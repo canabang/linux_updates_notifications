@@ -1,6 +1,5 @@
 Bonjour à tous,
 
-
 Si tout comme moi, vous avez plusieurs hôtes, voire même des VM sous Linux, le suivi des mises à jour système n'est pas toujours évident.
 Connexion en SSH à l'hôte, lancer un `apt update` pour vérifier s'il y a des mises à jour, et répéter l'opération sur chaque machine... 
 Pas vraiment de centralisation possible, ni de monitoring efficace et simple.
