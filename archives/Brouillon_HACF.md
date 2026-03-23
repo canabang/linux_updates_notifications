@@ -446,3 +446,7 @@ action:
       notification_id: "lud_bilan_hebdo"
 ```
 Avec tout ça, je suis immédiatement alerté dès qu'une nouvelle mise à jour fait son apparition sur l'un de mes serveurs. Et chaque vendredi soir, pendant que je déguste un petit rhum bien mérité, je reçois mon récapitulatif global : je sais ainsi d'emblée si je vais devoir passer une partie de mon week-end à scruter des changelogs et lancer des correctifs... ou si je peux me détendre l'esprit tranquille ! 🍹🐧
+
+Vous pourrez retrouver l'intégralité des fichiers et du code sur mon dépôt [GitHub](https://github.com/canabang/linux_updates_notifications/tree/main).
+
+À vos commentaires, et *enjoy* !

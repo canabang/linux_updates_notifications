@@ -18,7 +18,7 @@ action:
       serveurs_maj: >
         {# Création d'un espace de noms pour stocker dynamiquement les serveurs trouvés #}
         {% set ns = namespace(liste=[]) %}
-        {# Parcours aveugle de toutes les entités update appartenant à au device Linux Update Dashboard #}
+        {# Parcours aveugle de toutes les entités update appartenant au device Linux Update Dashboard #}
         {% for state in states.update | selectattr('attributes.device_name', 'defined') | selectattr('attributes.device_name', 'eq', 'Linux Update Dashboard') %}
           {# On compte uniquement les serveurs actifs et listant officiellement des packages #}
           {% if state.state == 'on' and state.attributes.update_count is defined and state.attributes.update_count | int > 0 %}
