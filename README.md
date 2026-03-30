@@ -11,7 +11,7 @@ Il est conçu pour offrir des performances maximales côté Home Assistant tout 
 ## 🛠️ Prérequis
 
 Avant de copier le code, assurez-vous d'avoir :
-1.  **MQTT Broker** : Installé et configuré sur votre Home Assistant (ex: Mosquitto).
+1.  **MQTT Broker** : Installé et configuré (ex: Mosquitto).
 2.  **HACS Cards** : Pour le dashboard, les cartes suivantes sont nécessaires :
     *   [Mushroom Cards](https://github.com/piitaya/lovelace-mushroom) 🍄
     *   [Auto-Entities](https://github.com/thomasloven/lovelace-auto-entities) 📋
